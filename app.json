@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "acertamais-mobile-app",
-    "slug": "acertamais-mobile-app",
+    "name": "acerta+",
+    "slug": "acertaplus",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,7 +15,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.katacha.acerta"
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +35,11 @@
         }
       ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": "58b278fb-c357-43f7-8cf9-d650bdd25ea4"
+      }
+    },
     "experiments": {
       "typedRoutes": true
     }

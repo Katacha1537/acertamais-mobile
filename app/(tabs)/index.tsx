@@ -1,74 +1,350 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import { signOut } from '@firebase/auth';
+import { useRouter } from 'expo-router';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useAuth } from '../../context/AuthContext';
+import { auth, db } from '../../service/firebase';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+// Tipagem para os dados do serviço
+interface Service {
+  id: string;
+  nome_servico: string;
+  credenciadoNome: string;
+  createdAt: { seconds: number };
+}
+
+// Tipagem para os dados do usuário
+interface UserData {
+  nome?: string;
+  empresaId: string;
+  [key: string]: any;
+}
 
 export default function HomeScreen() {
+  const { user } = useAuth();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [servicosContratados, setServicosContratados] = useState<number>(0);
+  const [historicoServicos, setHistoricoServicos] = useState<Service[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [logoutLoading, setLogoutLoading] = useState<boolean>(false);
+
+  const router = useRouter();
+
+  const fetchData = async () => {
+    try {
+      setRefreshing(true);
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const userDocRef = doc(db, 'funcionarios', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists()) throw new Error('Usuário não encontrado');
+      const data = userDoc.data() as UserData;
+      setUserData(data);
+
+      const companyDocRef = doc(db, 'empresas', data.empresaId);
+      const companyDoc = await getDoc(companyDocRef);
+      if (companyDoc.exists()) setCompanyName(companyDoc.data().nomeFantasia);
+
+      const solicitacoesRef = collection(db, 'solicitacoes');
+      const q = query(solicitacoesRef, where('clienteId', '==', user.uid), where('status', '==', 'confirmada'));
+      const querySnapshot = await getDocs(q);
+      setServicosContratados(querySnapshot.size);
+
+      const servicosList = await Promise.all(
+        querySnapshot.docs.map(async (doc) => {
+          const servicoData = doc.data();
+          const credenciadoNome = await getNameCredenciado(servicoData.donoId);
+
+          return {
+            id: doc.id,
+            nome_servico: servicoData.nome_servico || 'Serviço sem nome',
+            credenciadoNome,
+            createdAt: servicoData.createdAt || { seconds: 0 },
+          };
+        })
+      );
+      setHistoricoServicos(servicosList);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erro no fetchData:', error.message);
+      } else {
+        console.error('Erro desconhecido:', error);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      console.log("usuario deslogado")
+      router.push({
+        pathname: '/'
+      })
+      setLoading(false);
+      return;
+    }
+    fetchData();
+  }, [user]);
+
+  const onRefresh = () => {
+    if (!user) return;
+    fetchData();
+  };
+
+  const getNameCredenciado = async (donoId: string): Promise<string> => {
+    try {
+      const credenciadoRef = doc(db, 'credenciados', donoId);
+      const credenciadoSnap = await getDoc(credenciadoRef);
+      if (credenciadoSnap.exists()) {
+        return credenciadoSnap.data().nomeFantasia || 'Empresa desconhecida';
+      } else {
+        console.error('Credenciado não encontrado.');
+        return 'Empresa desconhecida';
+      }
+    } catch (error) {
+      console.error('Erro ao buscar credenciado:', error);
+      return 'Erro ao buscar empresa';
+    }
+  };
+
+  const handleLogout = async () => {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
+    try {
+      console.log('Iniciando logout...');
+      await signOut(auth);
+      console.log('Logout concluído com sucesso');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      alert('Erro ao sair da conta. Tente novamente.');
+    } finally {
+      setLogoutLoading(false);
+      console.log('Finalizando processo de logout');
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#003DA5" />
+        <Text style={styles.loadingText}>Carregando...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!userData) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Erro ao carregar dados</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.container}>
+      {/* Cabeçalho */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleLogout} disabled={logoutLoading}>
+          {logoutLoading ? (
+            <ActivityIndicator size="small" color="#FFF" style={styles.logoutButton} />
+          ) : (
+            <Text style={styles.logoutText}>SAIR</Text>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          Bem-vindo, {userData?.nome || 'Usuário'}!
+        </Text>
+
+      </View>
+
+      {/* Informações da Empresa */}
+      <View style={styles.userInfo}>
+        <Text style={styles.companyText}>
+          Trabalha em: {companyName || 'Empresa não disponível'}
+        </Text>
+      </View>
+
+      {/* Dashboard e Histórico */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#003DA5']}
+            tintColor={'#003DA5'}
+          />
+        }
+      >
+        <View style={styles.dashboardContainer}>
+          {/* Card de Serviços Contratados */}
+          <View style={styles.dashboardCard}>
+            <Text style={styles.dashboardLabel}>Serviços Contratados:</Text>
+            <Text style={styles.dashboardInfo}>{servicosContratados}</Text>
+          </View>
+
+          {/* Histórico de Serviços */}
+          <Text style={styles.sectionTitle}>Histórico de Serviços Feitos</Text>
+          {historicoServicos.length > 0 ? (
+            historicoServicos.map((servico) => (
+              <View key={servico.id} style={styles.serviceItem}>
+                <View>
+                  <Text style={styles.serviceName}>
+                    {servico.nome_servico || 'Serviço sem nome'}
+                  </Text>
+                  <Text style={styles.companyName}>
+                    {servico.credenciadoNome || 'Serviço sem nome'}
+                  </Text>
+                </View>
+                <Text style={styles.serviceDate}>
+                  {servico.createdAt
+                    ? new Date(servico.createdAt.seconds * 1000).toLocaleDateString()
+                    : ''}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noServiceText}>Nenhum serviço concluído.</Text>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  companyName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: '#F4F7FC',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  loadingText: {
+    fontSize: 18,
+    color: '#003DA5',
+    marginTop: 10,
+    fontWeight: '500',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#F4F7FC',
+  },
+  header: {
+    backgroundColor: '#003DA5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    position: 'relative',
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 50,
+  },
+  logoutButton: {
+    marginTop: 50,
+    marginBottom: 10,
+  },
+  logoutText: {
+    marginTop: 50,
+    marginBottom: 20,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF0000', // Vermelho
+  },
+  userInfo: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  companyText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#666',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  dashboardContainer: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  dashboardCard: {
+    backgroundColor: '#F4F7FC',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dashboardLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dashboardInfo: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#003DA5',
+    marginTop: 5,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#003DA5',
+    marginVertical: 15,
+    textAlign: 'center',
+  },
+  serviceItem: {
+    backgroundColor: '#F4F7FC',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serviceName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#003DA5',
+  },
+  serviceDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  noServiceText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#999',
+    marginVertical: 10,
   },
 });
