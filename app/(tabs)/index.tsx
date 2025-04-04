@@ -15,7 +15,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { auth, db } from '../../service/firebase';
 
-// Tipagem para os dados do serviço
 interface Service {
   id: string;
   nome_servico: string;
@@ -23,7 +22,6 @@ interface Service {
   createdAt: { seconds: number };
 }
 
-// Tipagem para os dados do usuário
 interface UserData {
   nome?: string;
   empresaId: string;
@@ -31,7 +29,7 @@ interface UserData {
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Renomeei para evitar confusão com variáveis locais
   const [userData, setUserData] = useState<UserData | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [servicosContratados, setServicosContratados] = useState<number>(0);
@@ -89,16 +87,16 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    console.log('useEffect disparado, user:', user);
     if (!user) {
-      console.log("usuario deslogado")
-      router.push({
-        pathname: '/'
-      })
-      setLoading(false);
+      console.log('Usuário deslogado, redirecionando para /');
+      // Usar push em vez de replace para garantir que a navegação ocorra
+      router.push('/');
       return;
     }
+    console.log('Usuário autenticado, chamando fetchData');
     fetchData();
-  }, [user]);
+  }, [user, router]);
 
   const onRefresh = () => {
     if (!user) return;
@@ -128,6 +126,8 @@ export default function HomeScreen() {
       console.log('Iniciando logout...');
       await signOut(auth);
       console.log('Logout concluído com sucesso');
+      // Redireciona imediatamente com push em vez de replace
+      router.push('/');
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       alert('Erro ao sair da conta. Tente novamente.');
@@ -140,13 +140,13 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#003DA5" />
+        <ActivityIndicator size="large" color="#003087" />
         <Text style={styles.loadingText}>Carregando...</Text>
       </SafeAreaView>
     );
   }
 
-  if (!userData) {
+  if (!userData && user) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Erro ao carregar dados</Text>
@@ -156,64 +156,42 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Cabeçalho */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleLogout} disabled={logoutLoading}>
+        <TouchableOpacity onPress={handleLogout} disabled={logoutLoading} style={styles.logoutButton}>
           {logoutLoading ? (
-            <ActivityIndicator size="small" color="#FFF" style={styles.logoutButton} />
+            <ActivityIndicator size="small" color="#FFF" />
           ) : (
             <Text style={styles.logoutText}>SAIR</Text>
           )}
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          Bem-vindo, {userData?.nome || 'Usuário'}!
-        </Text>
-
+        <Text style={styles.headerTitle}>Bem-vindo, {userData?.nome || 'Usuário'}!</Text>
       </View>
-
-      {/* Informações da Empresa */}
       <View style={styles.userInfo}>
-        <Text style={styles.companyText}>
-          Trabalha em: {companyName || 'Empresa não disponível'}
-        </Text>
+        <Text style={styles.companyText}>Trabalha em: {companyName || 'Empresa não disponível'}</Text>
       </View>
-
-      {/* Dashboard e Histórico */}
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#003DA5']}
-            tintColor={'#003DA5'}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#003087']} tintColor="#003087" />
         }
       >
         <View style={styles.dashboardContainer}>
-          {/* Card de Serviços Contratados */}
           <View style={styles.dashboardCard}>
             <Text style={styles.dashboardLabel}>Serviços Contratados:</Text>
             <Text style={styles.dashboardInfo}>{servicosContratados}</Text>
           </View>
-
-          {/* Histórico de Serviços */}
           <Text style={styles.sectionTitle}>Histórico de Serviços Feitos</Text>
           {historicoServicos.length > 0 ? (
             historicoServicos.map((servico) => (
               <View key={servico.id} style={styles.serviceItem}>
                 <View>
-                  <Text style={styles.serviceName}>
-                    {servico.nome_servico || 'Serviço sem nome'}
-                  </Text>
-                  <Text style={styles.companyName}>
-                    {servico.credenciadoNome || 'Serviço sem nome'}
-                  </Text>
+                  <Text style={styles.serviceName}>{servico.nome_servico || 'Sem nome'}</Text>
+                  <Text style={styles.companyName}>{servico.credenciadoNome || 'Desconhecida'}</Text>
                 </View>
                 <Text style={styles.serviceDate}>
                   {servico.createdAt
-                    ? new Date(servico.createdAt.seconds * 1000).toLocaleDateString()
-                    : ''}
+                    ? new Date(servico.createdAt.seconds * 1000).toLocaleDateString('pt-BR')
+                    : 'Sem data'}
                 </Text>
               </View>
             ))
@@ -227,59 +205,54 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  companyName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F4F7FC',
+    backgroundColor: '#F5F7FA',
   },
   loadingText: {
     fontSize: 18,
-    color: '#003DA5',
+    color: '#003087',
     marginTop: 10,
     fontWeight: '500',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F7FC',
-  },
   header: {
-    backgroundColor: '#003DA5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#003087',
+    paddingTop: 40,
+    paddingBottom: 30,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFF',
-    marginBottom: 50,
+    alignItems: 'center',
   },
   logoutButton: {
-    marginTop: 50,
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 50,
+    marginTop: 20,
   },
   logoutText: {
-    marginTop: 50,
-    marginBottom: 20,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#FF0000', // Vermelho
+    color: 'red',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'left',
   },
   userInfo: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 10,
+    paddingHorizontal: 20,
   },
   companyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
     color: '#666',
   },
@@ -290,17 +263,18 @@ const styles = StyleSheet.create({
   },
   dashboardContainer: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
+    borderRadius: 15,
     padding: 20,
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowRadius: 5,
+    elevation: 3,
   },
   dashboardCard: {
-    backgroundColor: '#F4F7FC',
-    borderRadius: 15,
+    backgroundColor: '#F5F7FA',
+    borderRadius: 10,
     padding: 20,
     alignItems: 'center',
     marginBottom: 20,
@@ -311,20 +285,20 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   dashboardInfo: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#003DA5',
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#003087',
     marginTop: 5,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#003DA5',
-    marginVertical: 15,
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#003087',
+    textAlign: 'left',
+    marginBottom: 15,
   },
   serviceItem: {
-    backgroundColor: '#F4F7FC',
+    backgroundColor: '#F5F7FA',
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
@@ -335,10 +309,17 @@ const styles = StyleSheet.create({
   serviceName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#003DA5',
+    color: '#003087',
+  },
+  companyName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginTop: 2,
   },
   serviceDate: {
     fontSize: 14,
+    fontWeight: '500',
     color: '#666',
   },
   noServiceText: {

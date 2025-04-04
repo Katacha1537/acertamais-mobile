@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import { collection, getDocs } from "firebase/firestore";
-import { Boxes, MapPin } from "lucide-react-native";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    FlatList,
     Image,
     SafeAreaView,
     ScrollView,
@@ -14,259 +15,290 @@ import {
 } from "react-native";
 import { db } from "../../service/firebase";
 
-// Definindo os tipos para os dados dos credenciados e segmentos
+// Tipos para os dados
 interface Credenciado {
     id: string;
     nomeFantasia: string;
     endereco: string;
-    segmento: string;
-    imagemUrl?: string;
+    segmento: string; // ID do segmento
+    imagemUrl: string;
 }
 
-interface Segments {
-    [key: string]: string;
+interface Segmento {
+    id: string;
+    nome: string;
 }
 
-interface BusinessScreenProps {
-    navigation: any; // Definir o tipo de navegação conforme sua implementação (ex: usando React Navigation)
-}
-
-const BusinessScreen: React.FC<BusinessScreenProps> = () => {
+export default function BusinessScreenT() {
     const [credenciados, setCredenciados] = useState<Credenciado[]>([]);
-    const [segmentos, setSegmentos] = useState<Segments>({});
+    const [filteredCredenciados, setFilteredCredenciados] = useState<Credenciado[]>([]);
+    const [segmentos, setSegmentos] = useState<Segmento[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
-    const [selectedSegment, setSelectedSegment] = useState<string>("all");
+    const [error, setError] = useState<string | null>(null);
+    const [selectedSegment, setSelectedSegment] = useState<string>("Todos");
     const router = useRouter();
+
     useEffect(() => {
         const fetchData = async () => {
             try {
+                console.log("Iniciando fetchData...");
+                setLoading(true);
+                setError(null);
+
                 // Buscar segmentos
                 const segmentosRef = collection(db, "segmentos");
                 const segmentosSnapshot = await getDocs(segmentosRef);
-                const segmentosData: Segments = {};
-                segmentosSnapshot.forEach((doc) => {
-                    segmentosData[doc.id] = doc.data().nome; // Assumindo que o campo é 'nome'
-                });
+                const segmentosData: Segmento[] = segmentosSnapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    nome: doc.data().nome || "Segmento não disponível",
+                }));
                 setSegmentos(segmentosData);
+                console.log("Segmentos carregados:", segmentosData);
 
                 // Buscar credenciados
                 const credenciadosRef = collection(db, "credenciados");
                 const snapshot = await getDocs(credenciadosRef);
-                const credenciadosData: Credenciado[] = snapshot.docs.map((doc) => ({
-                    id: doc.id,
-                    nomeFantasia: doc.data().nomeFantasia || "", // Verifique se o campo 'nomeFantasia' existe no seu banco de dados
-                    endereco: doc.data().endereco || "", // Verifique se o campo 'endereco' existe no seu banco de dados
-                    segmento: doc.data().segmento || "", // Verifique se o campo 'segmento' existe no seu banco de dados
-                    imagemUrl: doc.data().imagemUrl, // Isso pode ser opcional
-                }));
+                console.log("Snapshot recebido, docs:", snapshot.docs.length);
 
+                const credenciadosData: Credenciado[] = snapshot.docs.map((doc) => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        nomeFantasia: data.nomeFantasia || "Nome não disponível",
+                        endereco: data.endereco || "Endereço não disponível",
+                        segmento: data.segmento || "Segmento não disponível",
+                        imagemUrl: data.imagemUrl || "https://via.placeholder.com/80",
+                    };
+                });
+
+                console.log("Credenciados carregados:", credenciadosData);
                 setCredenciados(credenciadosData);
-            } catch (error) {
-                console.error("Erro ao carregar dados:", error);
+                setFilteredCredenciados(credenciadosData);
+            } catch (error: any) {
+                console.error("Erro ao carregar dados:", error.message);
+                setError("Erro ao carregar os dados. Tente novamente.");
             } finally {
                 setLoading(false);
+                console.log("FetchData finalizado, loading:", false);
             }
         };
 
         fetchData();
     }, []);
 
-    const filteredCredenciados = useMemo(() => {
-        if (selectedSegment === "all") return credenciados;
-        return credenciados.filter((item) => item.segmento === selectedSegment);
-    }, [selectedSegment, credenciados]);
+    // Função para obter o nome do segmento a partir do ID
+    const getSegmentoNome = (segmentoId: string) => {
+        const segmento = segmentos.find((seg) => seg.id === segmentoId);
+        return segmento ? segmento.nome : "Segmento não disponível";
+    };
+
+    // Filtrar credenciados com base no segmento selecionado
+    useEffect(() => {
+        if (selectedSegment === "Todos") {
+            setFilteredCredenciados(credenciados);
+        } else {
+            const filtered = credenciados.filter((credenciado) => {
+                const segmentoNome = getSegmentoNome(credenciado.segmento);
+                return segmentoNome === selectedSegment;
+            });
+            setFilteredCredenciados(filtered);
+        }
+    }, [selectedSegment, credenciados, segmentos]);
+
+    const handlePress = (credenciadoId: string) => {
+        console.log("Navegando para ServicesScreen com credenciadoId:", credenciadoId);
+        router.push({
+            pathname: '/ServicesScreen',
+            params: { credenciadoId },
+        });
+    };
+
+    const handleSegmentChange = (segment: string) => {
+        setSelectedSegment(segment);
+    };
+
+    // Função para renderizar cada item do FlatList
+    const renderSegmento = ({ item }: { item: Segmento | { id: string; nome: string } }) => (
+        <TouchableOpacity
+            style={[
+                styles.segmentButton,
+                selectedSegment === item.nome && styles.segmentButtonActive,
+            ]}
+            onPress={() => handleSegmentChange(item.nome)}
+        >
+            <Text
+                style={[
+                    styles.segmentText,
+                    selectedSegment === item.nome && styles.segmentTextActive,
+                ]}
+            >
+                {item.nome}
+            </Text>
+        </TouchableOpacity>
+    );
 
     if (loading) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#003DA5" />
-                <Text style={styles.loadingText}>Carregando credenciados...</Text>
+                <Text style={styles.loadingText}>Carregando...</Text>
             </SafeAreaView>
         );
     }
 
-    const renderSegmentFilter = () => {
-        const segmentsArray = [
-            { key: "all", label: "Todos" },
-            ...Object.entries(segmentos).map(([key, label]) => ({ key, label })),
-        ];
-
+    if (error) {
         return (
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterContainer}
-            >
-                {segmentsArray.map((segment) => (
-                    <TouchableOpacity
-                        key={segment.key}
-                        style={[
-                            styles.filterButton,
-                            selectedSegment === segment.key && styles.filterButtonActive
-                        ]}
-                        onPress={() => setSelectedSegment(segment.key)}
-                    >
-                        <Text
-                            style={[
-                                styles.filterButtonText,
-                                selectedSegment === segment.key && styles.filterButtonTextActive
-                            ]}
-                        >
-                            {segment.label}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
+            <SafeAreaView style={styles.loadingContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+            </SafeAreaView>
         );
-    };
+    }
 
-    const handlePress = (item: Credenciado) => {
-        // Navega para ServiceScreen e passa um parâmetro (exemplo: id)
-        router.push({
-            pathname: '/ServicesScreen',
-            params: { credenciadoId: item.id }, // Substitua '123' pelo valor desejado
-        });
-    };
-
-    const renderCredenciadoItem = (item: Credenciado) => {
-        const segmentName = segmentos[item.segmento] || "Segmento não encontrado";
-        return (
-            <View key={item.id} style={styles.card}>
-                <Image
-                    source={{ uri: item.imagemUrl || "https://via.placeholder.com/80" }} // Fallback para imagem
-                    style={styles.logoImage}
-                />
-                <View style={styles.infoContainer}>
-                    <Text style={styles.nomeFantasia}>{item.nomeFantasia}</Text>
-                    <View style={styles.infoRow}>
-                        <MapPin size={16} color="#003DA5" />
-                        <Text style={styles.endereco}>{item.endereco || "Endereço não disponível"}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                        <Boxes size={16} color="#003DA5" />
-                        <Text style={styles.segmento}>{segmentName}</Text>
-                    </View>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handlePress(item)}
-                    >
-                        <Text style={styles.buttonText}>Ver Serviços</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        );
-    };
+    // Dados para o FlatList (adicionando "Todos" como primeiro item)
+    const segmentData = [{ id: "todos", nome: "Todos" }, ...segmentos];
 
     return (
-        <SafeAreaView style={styles.safeContainer}>
-            <View style={styles.container}>
-                {renderSegmentFilter()}
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {filteredCredenciados.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyText}>
-                                Nenhum credenciado encontrado para esse segmento.
-                            </Text>
-                        </View>
-                    ) : (
-                        filteredCredenciados.map((item) => renderCredenciadoItem(item))
-                    )}
-                </ScrollView>
-            </View>
+        <SafeAreaView style={styles.container}>
+            {/* Segment Control com FlatList Horizontal */}
+            <FlatList
+                horizontal
+                data={segmentData}
+                renderItem={renderSegmento}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                style={styles.segmentContainer}
+                contentContainerStyle={styles.segmentContent}
+            />
+
+            {/* List of Credenciados */}
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                {filteredCredenciados.length === 0 ? (
+                    <Text style={styles.emptyText}>Nenhuma empresa encontrada.</Text>
+                ) : (
+                    filteredCredenciados.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.card}
+                            onPress={() => handlePress(item.id)}
+                        >
+                            <Image
+                                source={{ uri: item.imagemUrl }}
+                                style={styles.logoImage}
+                            />
+                            <View style={styles.cardContent}>
+                                <Text style={styles.nomeFantasia}>{item.nomeFantasia}</Text>
+                                <View style={styles.infoRow}>
+                                    <Ionicons name="location-outline" size={16} color="#555" />
+                                    <Text style={styles.info}>{item.endereco}</Text>
+                                </View>
+                                <View style={styles.infoRow}>
+                                    <Ionicons name="briefcase-outline" size={16} color="#555" />
+                                    <Text style={styles.info}>{getSegmentoNome(item.segmento)}</Text>
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.actionButton}
+                                    onPress={() => handlePress(item.id)}
+                                >
+                                    <Text style={styles.buttonText}>Ver Serviços</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </TouchableOpacity>
+                    ))
+                )}
+            </ScrollView>
         </SafeAreaView>
     );
-};
+}
 
 const styles = StyleSheet.create({
-    safeContainer: {
-        flex: 1,
-        backgroundColor: "#F4F7FC",
-    },
     container: {
         flex: 1,
-        padding: 20,
         backgroundColor: "#F4F7FC",
     },
-    filterContainer: {
-        paddingVertical: 5,
-        height: 50,
-        marginTop: 15,
+    segmentContainer: {
+        flex: 0.1,
+        paddingHorizontal: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: "#E0E0E0",
     },
-    filterButton: {
-        backgroundColor: "#FFF",
-        borderRadius: 20,
+    segmentContent: {
+        marginTop: 45
+    },
+    segmentButton: {
+        height: 40,
+        paddingHorizontal: 20,
         paddingVertical: 8,
-        paddingHorizontal: 15,
-        marginRight: 10,
+        borderRadius: 20,
+        marginHorizontal: 8,
+        backgroundColor: "#FFFFFF",
         borderWidth: 1,
-        borderColor: "#003DA5",
-        alignItems: "center",
+        borderColor: "#E0E0E0",
         justifyContent: "center",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
-    filterButtonActive: {
+    segmentButtonActive: {
         backgroundColor: "#003DA5",
+        borderColor: "#003DA5",
     },
-    filterButtonText: {
+    segmentText: {
         fontSize: 14,
-        color: "#003DA5",
+        fontWeight: "600",
+        color: "#666",
+        textAlign: "center",
     },
-    filterButtonTextActive: {
-        color: "#FFF",
-        fontWeight: "bold",
+    segmentTextActive: {
+        color: "#FFFFFF",
+        fontWeight: "700",
     },
     scrollContent: {
-        paddingBottom: 20,
+        padding: 10, // Reduzido o padding para diminuir o espaço
+        paddingTop: 5, // Ajustado para minimizar o espaço entre os segmentos e a lista
     },
     card: {
-        backgroundColor: "#FFF",
-        borderRadius: 15,
-        marginBottom: 20,
-        padding: 15,
         flexDirection: "row",
-        alignItems: "center",
+        backgroundColor: "#FFF",
+        borderRadius: 10,
+        padding: 15,
+        marginBottom: 15,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
+        shadowRadius: 5,
+        elevation: 3,
+    },
+    cardContent: {
+        flex: 1,
     },
     logoImage: {
-        width: 80,
-        height: 80,
+        width: 60,
+        height: 60,
         borderRadius: 10,
         marginRight: 15,
         backgroundColor: "#eee",
     },
-    infoContainer: {
-        flex: 1,
-    },
     nomeFantasia: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: "bold",
         color: "#003DA5",
-        marginBottom: 10,
+        marginBottom: 5,
     },
     infoRow: {
         flexDirection: "row",
         alignItems: "center",
         marginBottom: 5,
     },
-    endereco: {
-        fontSize: 14,
-        color: "#555",
-        marginLeft: 5,
-    },
-    segmento: {
+    info: {
         fontSize: 14,
         color: "#555",
         marginLeft: 5,
     },
     actionButton: {
         backgroundColor: "#003DA5",
-        paddingVertical: 10,
+        paddingVertical: 8,
         paddingHorizontal: 15,
         borderRadius: 10,
         alignItems: "center",
@@ -287,16 +319,16 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: "#003DA5",
         marginTop: 10,
-        fontWeight: "500",
     },
-    emptyContainer: {
-        alignItems: "center",
-        paddingTop: 50,
+    errorText: {
+        fontSize: 18,
+        color: "red",
+        textAlign: "center",
     },
     emptyText: {
         fontSize: 16,
         color: "#555",
+        textAlign: "center",
+        marginTop: 20,
     },
 });
-
-export default BusinessScreen;

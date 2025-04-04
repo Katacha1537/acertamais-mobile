@@ -2,14 +2,12 @@ import BackButton from '@/components/BackButton';
 import { emailValidator } from '@/libs/emailValidator';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, TextInput as RNTextInput, StyleSheet, Text } from 'react-native';
 import Background from '../components/Background';
 import Button from '../components/Button';
 import Header from '../components/Header';
 import Logo from '../components/Logo';
-import TextInput from '../components/TextInput';
 
-// Tipagem para o estado do email
 interface EmailState {
     value: string;
     error: string;
@@ -17,7 +15,7 @@ interface EmailState {
 
 export default function ResetPasswordScreen() {
     const [email, setEmail] = useState<EmailState>({ value: '', error: '' });
-    const [loading, setLoading] = useState<boolean>(false); // Estado de carregamento
+    const [loading, setLoading] = useState<boolean>(false);
     const router = useRouter();
 
     const sendResetPasswordEmail = async () => {
@@ -27,7 +25,7 @@ export default function ResetPasswordScreen() {
             return;
         }
 
-        setLoading(true); // Ativa o estado de carregamento
+        setLoading(true);
         try {
             console.log(email.value);
             const response = await fetch('https://acertamais.vercel.app/api/auth/reset-password', {
@@ -70,7 +68,7 @@ export default function ResetPasswordScreen() {
             console.error('Erro:', (error as Error).message);
             setEmail({ ...email, error: (error as Error).message });
         } finally {
-            setLoading(false); // Desativa o estado de carregamento
+            setLoading(false);
         }
     };
 
@@ -83,26 +81,51 @@ export default function ResetPasswordScreen() {
             <BackButton goBack={handlePress} />
             <Logo />
             <Header>Redefinir sua senha.</Header>
-            <TextInput
-                label="Email"
+            <RNTextInput
+                style={styles.input}
+                placeholder="Email"
                 returnKeyType="done"
                 value={email.value}
                 onChangeText={(text: string) => setEmail({ value: text, error: '' })}
-                error={!!email.error}
-                errorText={email.error}
                 autoCapitalize="none"
                 textContentType="emailAddress"
                 keyboardType="email-address"
-                description="Você receberá um email com o link para redefinir sua senha."
             />
+            {email.error ? <Text style={styles.error}>{email.error}</Text> : null}
+            <Text style={styles.description}>
+                Você receberá um email com o link para redefinir sua senha.
+            </Text>
             <Button
                 mode="contained"
                 onPress={sendResetPasswordEmail}
                 style={{ marginTop: 16 }}
-                disabled={loading} // Desabilita o botão enquanto carrega
+                disabled={loading}
             >
                 {loading ? 'Carregando...' : 'Continuar'}
             </Button>
         </Background>
     );
 }
+
+const styles = StyleSheet.create({
+    input: {
+        width: '100%',
+        height: 48,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 5,
+        paddingHorizontal: 10,
+        marginVertical: 10,
+        backgroundColor: '#fff',
+    },
+    error: {
+        color: 'red',
+        fontSize: 12,
+        marginBottom: 10,
+    },
+    description: {
+        fontSize: 12,
+        color: '#666',
+        marginBottom: 10,
+    },
+});

@@ -1,10 +1,10 @@
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from expo/vector-icons
+import { router } from 'expo-router';
 import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
-import { X } from 'lucide-react-native';
 import React, { useContext, useEffect, useState } from 'react';
 import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { db } from '../../service/firebase';
-import { router } from 'expo-router';
 
 // Definir os tipos para os dados
 interface Request {
@@ -110,14 +110,14 @@ const PendingRequestsScreen: React.FC<PendingRequestsScreenProps> = ({ navigatio
                 <Text style={styles.serviceName}>{item.nome_servico}</Text>
                 <Text style={styles.description}>{item.descricao}</Text>
                 <Text style={styles.price}>
-                    Preço: R$ {item.preco}
+                    Preço: R$ {item.preco.toFixed(2).replace('.', ',')}
                 </Text>
             </View>
             <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => confirmCancel(item.id, item.nome_servico)}
             >
-                <X size={24} color="#FFF" />
+                <Ionicons name="close" size={16} color="#FFF" />
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
         </View>
@@ -169,7 +169,6 @@ const PendingRequestsScreen: React.FC<PendingRequestsScreenProps> = ({ navigatio
 
 export default PendingRequestsScreen;
 
-// Os estilos permanecem os mesmos
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -178,11 +177,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#F4F7FC',
     },
     title: {
-        fontSize: 26,
+        fontSize: 24,
         fontWeight: 'bold',
         color: '#003DA5',
         marginBottom: 20,
-        textAlign: 'center',
+        textAlign: 'left', // Aligned to the left as in the image
     },
     requestItem: {
         flexDirection: 'row',
@@ -190,7 +189,11 @@ const styles = StyleSheet.create({
         padding: 15,
         borderRadius: 10,
         marginBottom: 15,
-        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+        elevation: 3,
         alignItems: 'center',
         justifyContent: 'space-between',
     },
@@ -199,7 +202,7 @@ const styles = StyleSheet.create({
         marginRight: 10,
     },
     serviceName: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
         color: '#003DA5',
     },
@@ -209,8 +212,9 @@ const styles = StyleSheet.create({
         marginVertical: 5,
     },
     price: {
-        fontSize: 16,
-        color: '#333',
+        fontSize: 14,
+        color: 'green',
+        fontWeight: '500',
     },
     cancelButton: {
         flexDirection: 'row',
@@ -221,7 +225,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cancelButtonText: {
-        fontSize: 16,
+        fontSize: 14,
         color: '#FFF',
         marginLeft: 5,
         fontWeight: 'bold',
