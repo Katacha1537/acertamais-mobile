@@ -2,14 +2,13 @@
   "expo": {
     "name": "acerta+",
     "slug": "acertaplus",
-    "version": "1.0.1",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
       "bundleIdentifier": "com.i07publicidade.acertamais",
       "supportsTablet": false,
       "infoPlist": {
