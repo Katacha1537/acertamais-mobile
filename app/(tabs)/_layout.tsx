@@ -16,7 +16,9 @@ export default function TabLayout() {
     console.log('Valor atual de user é null?', user === null);
     if (!user) {
       console.log('Usuário deslogado, tentando redirecionar para /');
-      router.replace('/'); // Usar replace para evitar histórico
+      router.push({
+        pathname: '/ResetToRoot'
+      });
       console.log('Redirecionamento chamado');
       return;
     }

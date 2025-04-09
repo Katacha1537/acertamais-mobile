@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from expo/vector-icons
+import { signOut } from '@firebase/auth';
+import { useRouter } from 'expo-router';
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Adicionei updateDoc
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  Alert,
+  View,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../service/firebase';
+import { auth, db } from '../../service/firebase';
 
 interface UserData {
   nome?: string;
@@ -28,7 +30,7 @@ export default function ProfileScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [menuVisible, setMenuVisible] = useState<boolean>(false); // Estado para controlar o menu
-
+  const router = useRouter();
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -62,6 +64,11 @@ export default function ProfileScreen() {
       await updateDoc(userDocRef, { status: 'disabled' });
       Alert.alert('Sucesso', 'Sua conta foi desativada.');
       setUserData((prev) => ({ ...prev, status: 'disabled' })); // Atualiza localmente
+      await signOut(auth);
+      console.log('Logout concluído com sucesso');
+      router.push({
+        pathname: '/ResetToRoot'
+      });
     } catch (error) {
       console.error('Erro ao desativar conta:', error);
       Alert.alert('Erro', 'Não foi possível desativar a conta. Tente novamente.');

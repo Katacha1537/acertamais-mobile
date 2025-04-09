@@ -90,8 +90,12 @@ export default function HomeScreen() {
     console.log('useEffect disparado, user:', user);
     if (!user) {
       console.log('Usuário deslogado, redirecionando para /');
-      // Usar push em vez de replace para garantir que a navegação ocorra
-      router.push('/');
+      // Adicionar um pequeno atraso para evitar conflitos de renderização
+      setTimeout(() => {
+        router.push({
+          pathname: '/ResetToRoot'
+        });
+      }, 0);
       return;
     }
     console.log('Usuário autenticado, chamando fetchData');
@@ -126,8 +130,10 @@ export default function HomeScreen() {
       console.log('Iniciando logout...');
       await signOut(auth);
       console.log('Logout concluído com sucesso');
-      // Redireciona imediatamente com push em vez de replace
-      router.push('/');
+
+      router.push({
+        pathname: '/ResetToRoot'
+      });
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       alert('Erro ao sair da conta. Tente novamente.');

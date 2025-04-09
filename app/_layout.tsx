@@ -35,6 +35,7 @@ export default function RootLayout() {
           <Stack.Screen name="ServiceDetailsScreen" options={{ headerShown: false }} />
           <Stack.Screen name="RegisterScreen" options={{ headerShown: false }} />
           <Stack.Screen name="ResetPasswordScreen" options={{ headerShown: false }} />
+          <Stack.Screen name="ResetToRoot" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
