@@ -1,12 +1,13 @@
 import { useAuth } from '@/context/AuthContext';
-import { auth, db } from '@/service/firebase';
+import { useFirestore } from '@/hooks/useFirestore';
+import { auth } from '@/service/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import React, { useState } from 'react';
 import {
     SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -19,22 +20,7 @@ interface InputState {
     error: string;
 }
 
-const maskCPF = (value: string): string => {
-    return value
-        .replace(/\D/g, '')
-        .replace(/^(\d{3})(\d)/, '$1.$2')
-        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-        .replace(/\.(\d{3})(\d)/, '.$1-$2')
-        .replace(/-(\d{2})\d+$/, '-$1');
-};
-
-const isValidCPF = (cpf: string): boolean => {
-    const cleaned = cpf.replace(/\D/g, '');
-    return cleaned.length === 11;
-};
-
 export default function RegisterScreen() {
-    const [cpf, setCpf] = useState<InputState>({ value: '', error: '' });
     const [email, setEmail] = useState<InputState>({ value: '', error: '' });
     const [password, setPassword] = useState<InputState>({ value: '', error: '' });
     const [confirmPassword, setConfirmPassword] = useState<InputState>({ value: '', error: '' });
@@ -43,15 +29,23 @@ export default function RegisterScreen() {
     const { user } = useAuth();
     const router = useRouter();
 
+    const { addDocument: addFuncionario, loading: addLoading } = useFirestore({
+        collectionName: 'funcionarios'
+    });
+
+    const { addDocument: addUser } = useFirestore({
+        collectionName: 'users'
+    });
+
+    const createLogin = async (email: string, password: string) => {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        return userCredential.user.uid;
+    };
+
     const onRegisterPressed = async () => {
         setLoading(true);
         try {
             // Validações
-            if (!cpf.value || !isValidCPF(cpf.value)) {
-                setCpf({ ...cpf, error: !cpf.value ? 'CPF não pode ser vazio' : 'CPF inválido' });
-                setLoading(false);
-                return;
-            }
             if (!email.value || !email.value.includes('@')) {
                 setEmail({ ...email, error: !email.value ? 'Email não pode ser vazio' : 'Email inválido' });
                 setLoading(false);
@@ -77,24 +71,30 @@ export default function RegisterScreen() {
             }
 
             // Criação do usuário no Firebase Authentication
-            const userCredential = await createUserWithEmailAndPassword(auth, email.value, password.value);
-            const user = userCredential.user;
+            const userCreated = await createLogin(email.value, password.value);
 
-            // Salvando informações adicionais no Firestore
-            await setDoc(doc(db, 'users', user.uid), {
+            // Salvando informações no Firestore
+            const userInfo = {
+                uid: userCreated,
+                role: 'employee',
                 email: email.value,
-                role: 'employee', // Define como funcionário por padrão
-                createdAt: new Date().toISOString(),
-            });
+                firstLogin: true
+            };
 
-            await setDoc(doc(db, 'funcionarios', user.uid), {
-                cpf: cpf.value,
+            await addUser(userInfo, null);
+
+            await addFuncionario({
+                id: userCreated,
+                companyName: 'Acerta+',
+                empresaId: 'LPfBr5BAJlMiDVxdMs0XOvMIKaG2',
                 email: email.value,
-                status: 'active', // Status inicial como ativo
-            });
+            }, userCreated);
+
+            // Deslogar o usuário após o registro
+            await signOut(auth);
 
             console.log('Registro bem-sucedido');
-            router.replace('/(tabs)');
+            router.replace('/'); // Redirect to login page
         } catch (error: any) {
             console.error('Erro no registro:', error);
             if (error.code === 'auth/email-already-in-use') {
@@ -111,101 +111,91 @@ export default function RegisterScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                {/* Logo */}
-                <Text style={styles.logo}>✚</Text>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={styles.content}>
+                    {/* Logo */}
+                    <Text style={styles.logo}>✚</Text>
 
-                {/* Título */}
-                <Text style={styles.header}>Criar conta</Text>
+                    {/* Título */}
+                    <Text style={styles.header}>Criar conta</Text>
 
-                {/* Campo CPF */}
-                <View style={styles.inputContainer}>
-                    <Text style={styles.label}>CPF</Text>
-                    <TextInput
-                        placeholder='***.***.***-**'
-                        returnKeyType='next'
-                        value={cpf.value}
-                        onChangeText={(text) => setCpf({ value: maskCPF(text), error: '' })}
-                        autoCapitalize='none'
-                        keyboardType='number-pad'
-                        style={[styles.textInput, cpf.error ? styles.inputError : null]}
-                    />
-                    {cpf.error ? <Text style={styles.errorText}>{cpf.error}</Text> : null}
-                </View>
+                    {/* Campo Email */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Email</Text>
+                        <TextInput
+                            placeholder='exemplo@dominio.com'
+                            returnKeyType='next'
+                            value={email.value}
+                            onChangeText={(text) => setEmail({ value: text, error: '' })}
+                            autoCapitalize='none'
+                            keyboardType='email-address'
+                            style={[styles.textInput, email.error ? styles.inputError : null]}
+                        />
+                        {email.error ? <Text style={styles.errorText}>{email.error}</Text> : null}
+                    </View>
 
-                {/* Campo Email */}
-                <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Email</Text>
-                    <TextInput
-                        placeholder='exemplo@dominio.com'
-                        returnKeyType='next'
-                        value={email.value}
-                        onChangeText={(text) => setEmail({ value: text, error: '' })}
-                        autoCapitalize='none'
-                        keyboardType='email-address'
-                        style={[styles.textInput, email.error ? styles.inputError : null]}
-                    />
-                    {email.error ? <Text style={styles.errorText}>{email.error}</Text> : null}
-                </View>
+                    {/* Campo Senha */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Senha</Text>
+                        <View style={styles.passwordContainer}>
+                            <TextInput
+                                placeholder='*********'
+                                returnKeyType='next'
+                                value={password.value}
+                                onChangeText={(text) => setPassword({ value: text, error: '' })}
+                                secureTextEntry={!showPassword}
+                                style={[styles.textInput, styles.passwordInput, password.error ? styles.inputError : null]}
+                            />
+                            <TouchableOpacity
+                                onPress={() => setShowPassword(!showPassword)}
+                                style={styles.eyeIcon}
+                            >
+                                {showPassword ? (
+                                    <Ionicons name='eye-outline' size={24} color='gray' />
+                                ) : (
+                                    <Ionicons name='eye-off-outline' size={24} color='gray' />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                        {password.error ? <Text style={styles.errorText}>{password.error}</Text> : null}
+                    </View>
 
-                {/* Campo Senha */}
-                <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Senha</Text>
-                    <View style={styles.passwordContainer}>
+                    {/* Campo Confirmar Senha */}
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>Confirmar Senha</Text>
                         <TextInput
                             placeholder='*********'
-                            returnKeyType='next'
-                            value={password.value}
-                            onChangeText={(text) => setPassword({ value: text, error: '' })}
+                            returnKeyType='done'
+                            value={confirmPassword.value}
+                            onChangeText={(text) => setConfirmPassword({ value: text, error: '' })}
                             secureTextEntry={!showPassword}
-                            style={[styles.textInput, styles.passwordInput, password.error ? styles.inputError : null]}
+                            style={[styles.textInput, confirmPassword.error ? styles.inputError : null]}
                         />
-                        <TouchableOpacity
-                            onPress={() => setShowPassword(!showPassword)}
-                            style={styles.eyeIcon}
-                        >
-                            {showPassword ? (
-                                <Ionicons name='eye-outline' size={24} color='gray' />
-                            ) : (
-                                <Ionicons name='eye-off-outline' size={24} color='gray' />
-                            )}
-                        </TouchableOpacity>
+                        {confirmPassword.error ? <Text style={styles.errorText}>{confirmPassword.error}</Text> : null}
                     </View>
-                    {password.error ? <Text style={styles.errorText}>{password.error}</Text> : null}
+
+                    {/* Botão Registrar */}
+                    <TouchableOpacity
+                        style={[styles.button, loading ? styles.buttonDisabled : null]}
+                        onPress={onRegisterPressed}
+                        disabled={loading}
+                    >
+                        <Text style={styles.buttonText}>{loading ? 'Carregando...' : 'Registrar'}</Text>
+                    </TouchableOpacity>
+
+                    {/* Link para voltar ao Login */}
+                    <TouchableOpacity
+                        style={styles.backToLogin}
+                        onPress={() => router.push('/')}
+                        disabled={loading}
+                    >
+                        <Text style={styles.backText}>Já tem conta? Faça login</Text>
+                    </TouchableOpacity>
                 </View>
-
-                {/* Campo Confirmar Senha */}
-                <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Confirmar Senha</Text>
-                    <TextInput
-                        placeholder='*********'
-                        returnKeyType='done'
-                        value={confirmPassword.value}
-                        onChangeText={(text) => setConfirmPassword({ value: text, error: '' })}
-                        secureTextEntry={!showPassword}
-                        style={[styles.textInput, confirmPassword.error ? styles.inputError : null]}
-                    />
-                    {confirmPassword.error ? <Text style={styles.errorText}>{confirmPassword.error}</Text> : null}
-                </View>
-
-                {/* Botão Registrar */}
-                <TouchableOpacity
-                    style={[styles.button, loading ? styles.buttonDisabled : null]}
-                    onPress={onRegisterPressed}
-                    disabled={loading}
-                >
-                    <Text style={styles.buttonText}>{loading ? 'Carregando...' : 'Registrar'}</Text>
-                </TouchableOpacity>
-
-                {/* Link para voltar ao Login */}
-                <TouchableOpacity
-                    style={styles.backToLogin}
-                    onPress={() => router.push('/')}
-                    disabled={loading}
-                >
-                    <Text style={styles.backText}>Já tem conta? Faça login</Text>
-                </TouchableOpacity>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -214,6 +204,10 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingBottom: 20,
     },
     content: {
         flex: 1,

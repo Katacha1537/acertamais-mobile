@@ -1,4 +1,5 @@
 import { useAuth } from '@/context/AuthContext';
+import { useIsOk } from '@/context/IsOkContext';
 import { auth, db } from '@/service/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -22,7 +23,7 @@ interface InputState {
 interface UserData {
     email: string;
     role: string;
-    status?: string; // Adicionado para verificar o status
+    status?: string;
     [key: string]: any;
 }
 
@@ -40,16 +41,20 @@ const isValidCPF = (cpf: string): boolean => {
     return cleaned.length === 11;
 };
 
+const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+};
+
 export default function LoginScreen() {
-    const [cpf, setCpf] = useState<InputState>({ value: '', error: '' });
+    const [identifier, setIdentifier] = useState<InputState>({ value: '', error: '' }); // Campo para CPF ou Email
     const [password, setPassword] = useState<InputState>({ value: '', error: '' });
     const [showPassword, setShowPassword] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(false);
     const { user } = useAuth();
     const router = useRouter();
-
+    const { isOk } = useIsOk()
     useEffect(() => {
-        console.log('useEffect disparado, user:', user);
         if (user) {
             console.log('Redirecionando para /(tabs)');
             router.replace('/(tabs)');
@@ -60,49 +65,72 @@ export default function LoginScreen() {
         console.log('onLoginPressed chamado');
         setLoading(true);
         try {
-            if (!cpf.value) {
-                setCpf({ ...cpf, error: 'CPF não pode ser vazio' });
+            if (!identifier.value) {
+                setIdentifier({ ...identifier, error: isOk ? 'Email não pode ser vazio' : 'CPF não pode ser vazio' });
                 setLoading(false);
                 return;
             }
-            if (!isValidCPF(cpf.value)) {
-                setCpf({ ...cpf, error: 'CPF inválido' });
-                setLoading(false);
-                return;
+
+            if (isOk) {
+                // Validação para Email
+                if (!isValidEmail(identifier.value)) {
+                    setIdentifier({ ...identifier, error: 'Email inválido' });
+                    setLoading(false);
+                    return;
+                }
+            } else {
+                // Validação para CPF
+                if (!isValidCPF(identifier.value)) {
+                    setIdentifier({ ...identifier, error: 'CPF inválido' });
+                    setLoading(false);
+                    return;
+                }
             }
+
             if (!password.value) {
                 setPassword({ ...password, error: 'Senha não pode ser vazia' });
                 setLoading(false);
                 return;
             }
 
-            const funcionariosRef = collection(db, 'funcionarios');
-            const q = query(funcionariosRef, where('cpf', '==', cpf.value));
-            const querySnapshot = await getDocs(q);
-            console.log('Query funcionários:', querySnapshot.docs.length);
+            let emailToUse: string;
 
-            if (querySnapshot.empty) {
-                setCpf({ ...cpf, error: 'CPF não encontrado' });
-                setLoading(false);
-                return;
+            if (isOk) {
+                // Login com Email
+                emailToUse = identifier.value;
+            } else {
+                // Login com CPF
+                const funcionariosRef = collection(db, 'funcionarios');
+                const q = query(funcionariosRef, where('cpf', '==', identifier.value));
+                const querySnapshot = await getDocs(q);
+                console.log('Query funcionários:', querySnapshot.docs.length);
+
+                if (querySnapshot.empty) {
+                    setIdentifier({ ...identifier, error: 'CPF não encontrado' });
+                    setLoading(false);
+                    return;
+                }
+
+                const funcionario = querySnapshot.docs[0].data() as { email: string; status?: string };
+
+                // Verificar se o status é 'disabled'
+                if (funcionario.status === 'disabled') {
+                    setIdentifier({ ...identifier, error: 'Esta conta foi desativada. Entre em contato com o suporte.' });
+                    setLoading(false);
+                    return;
+                }
+
+                emailToUse = funcionario.email;
             }
 
-            const funcionario = querySnapshot.docs[0].data() as { email: string; status?: string };
-
-            // Verificar se o status é 'disabled'
-            if (funcionario.status === 'disabled') {
-                setCpf({ ...cpf, error: 'Esta conta foi desativada. Entre em contato com o suporte.' });
-                setLoading(false);
-                return;
-            }
-
+            // Verificar usuário no Firestore
             const userRef = collection(db, 'users');
-            const qUser = query(userRef, where('email', '==', funcionario.email));
+            const qUser = query(userRef, where('email', '==', emailToUse));
             const querySnapshotUser = await getDocs(qUser);
             console.log('Query users:', querySnapshotUser.docs.length);
 
             if (querySnapshotUser.empty) {
-                setCpf({ ...cpf, error: 'Usuário associado ao CPF não encontrado' });
+                setIdentifier({ ...identifier, error: isOk ? 'Email não encontrado' : 'Usuário associado ao CPF não encontrado' });
                 setLoading(false);
                 return;
             }
@@ -111,12 +139,13 @@ export default function LoginScreen() {
             console.log('User info:', userInfo);
 
             if (userInfo.role !== 'employee') {
-                setCpf({ ...cpf, error: 'Permissão negada' });
+                setIdentifier({ ...identifier, error: 'Permissão negada' });
                 setLoading(false);
                 return;
             }
 
-            await signInWithEmailAndPassword(auth, funcionario.email, password.value);
+            // Autenticar com Firebase Authentication
+            await signInWithEmailAndPassword(auth, emailToUse, password.value);
             console.log('Login bem-sucedido');
             router.replace('/(tabs)');
         } catch (error: any) {
@@ -124,9 +153,9 @@ export default function LoginScreen() {
             if (error.code === 'auth/wrong-password') {
                 setPassword({ ...password, error: 'Senha incorreta' });
             } else if (error.code === 'auth/user-not-found') {
-                setCpf({ ...cpf, error: 'Usuário não encontrado' });
+                setIdentifier({ ...identifier, error: isOk ? 'Email não encontrado' : 'Usuário não encontrado' });
             } else {
-                setCpf({ ...cpf, error: 'Erro ao tentar acessar a conta' });
+                setIdentifier({ ...identifier, error: 'Erro ao tentar acessar a conta' });
             }
         } finally {
             setLoading(false);
@@ -142,19 +171,19 @@ export default function LoginScreen() {
                 {/* Título */}
                 <Text style={styles.header}>Acessar conta</Text>
 
-                {/* Campo CPF */}
+                {/* Campo Identificador (CPF ou Email) */}
                 <View style={styles.inputContainer}>
-                    <Text style={styles.label}>CPF</Text>
+                    <Text style={styles.label}>{isOk ? 'Email' : 'CPF'}</Text>
                     <TextInput
-                        placeholder='***.***.***-**'
+                        placeholder={isOk ? 'exemplo@dominio.com' : '***.***.***-**'}
                         returnKeyType='next'
-                        value={cpf.value}
-                        onChangeText={(text) => setCpf({ value: maskCPF(text), error: '' })}
+                        value={identifier.value}
+                        onChangeText={(text) => setIdentifier({ value: isOk ? text : maskCPF(text), error: '' })}
                         autoCapitalize='none'
-                        keyboardType='number-pad'
-                        style={[styles.textInput, cpf.error ? styles.inputError : null]}
+                        keyboardType={isOk ? 'email-address' : 'number-pad'}
+                        style={[styles.textInput, identifier.error ? styles.inputError : null]}
                     />
-                    {cpf.error ? <Text style={styles.errorText}>{cpf.error}</Text> : null}
+                    {identifier.error ? <Text style={styles.errorText}>{identifier.error}</Text> : null}
                 </View>
 
                 {/* Campo Senha */}
@@ -198,25 +227,16 @@ export default function LoginScreen() {
                 >
                     <Text style={styles.buttonText}>{loading ? 'Carregando...' : 'Entrar'}</Text>
                 </TouchableOpacity>
-
-                {/* <TouchableOpacity
-                    style={styles.buttonDisabled}
-                    onPress={() => router.push('/RegisterScreen')}
-                    disabled={loading}
-                >
-                    <Text style={styles.buttonText}>Registra-se</Text>
-                </TouchableOpacity> */}
-
-                {/* Links para Termos de Uso e Política de Privacidade */}
-                {/* <View style={styles.termsContainer}>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://seusite.com/termos-de-uso')}>
-                        <Text style={styles.termsLink}>Termos de Uso</Text>
+                {isOk && <Text style={styles.buttonText}>Carregando...</Text>}
+                {isOk && (
+                    <TouchableOpacity
+                        style={styles.buttonRegister}
+                        onPress={() => router.push('/RegisterScreen')}
+                        disabled={loading}
+                    >
+                        <Text style={styles.buttonText}>Registra-se</Text>
                     </TouchableOpacity>
-                    <Text style={styles.termsSeparator}> | </Text>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://seusite.com/politica-de-privacidade')}>
-                        <Text style={styles.termsLink}>Política de Privacidade</Text>
-                    </TouchableOpacity>
-                </View> */}
+                )}
             </View>
         </SafeAreaView>
     );
@@ -296,7 +316,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     buttonRegister: {
-        backgroundColor: '#0052CC',
+        backgroundColor: '#6889ba',
+        marginTop: 12,
         paddingVertical: 15,
         borderRadius: 5,
         alignItems: 'center',
@@ -308,20 +329,5 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: 'bold',
-    },
-    termsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 20,
-    },
-    termsLink: {
-        fontSize: 14,
-        color: '#0052CC',
-        textDecorationLine: 'underline',
-    },
-    termsSeparator: {
-        fontSize: 14,
-        color: '#666',
-        marginHorizontal: 5,
     },
 });

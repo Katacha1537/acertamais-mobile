@@ -6,6 +6,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { AuthProvider } from '@/context/AuthContext';
+import { CartProvider } from '@/context/CartContext';
+import { IsOkProvider } from '@/context/IsOkContext';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -28,17 +30,20 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <AuthProvider>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="ServicesScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="PendingRequestsScreenT" options={{ headerShown: false }} />
-          <Stack.Screen name="ServiceDetailsScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="RegisterScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="ResetPasswordScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="ResetToRoot" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
+        <CartProvider>
+          <IsOkProvider>
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="ServicesScreen" options={{ headerShown: false }} />
+              <Stack.Screen name="ServiceDetailsScreen" options={{ headerShown: false }} />
+              <Stack.Screen name="RegisterScreen" options={{ headerShown: false }} />
+              <Stack.Screen name="ResetPasswordScreen" options={{ headerShown: false }} />
+              <Stack.Screen name="ResetToRoot" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+          </IsOkProvider>
+        </CartProvider>
       </AuthProvider>
       <StatusBar style="auto" />
     </ThemeProvider>

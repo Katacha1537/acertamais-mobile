@@ -1,6 +1,6 @@
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/service/firebase';
-import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons'; // Importando ícones
+import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
@@ -71,55 +71,54 @@ export default function ServiceDetailsScreen() {
         };
     }, [service?.credenciado_id]);
 
-    const handleSolicitarServico = async () => {
-        console.log('Botão Solicitar clicado');
+    const handleAddToCart = async () => {
+        console.log('Botão Adicionar ao Carrinho clicado');
         if (loading) {
-            console.log('Solicitação em andamento, ignorando clique');
+            console.log('Adição em andamento, ignorando clique');
             return;
         }
 
         if (!user?.uid) {
             console.log('Usuário não autenticado, redirecionando para login');
-            Alert.alert('Faça login para solicitar serviços!');
+            Alert.alert('Faça login para adicionar ao carrinho!');
             router.push('/');
             return;
         }
 
         setLoading(true);
-        console.log('Iniciando solicitação de serviço...');
+        console.log('Iniciando adição ao carrinho...');
 
         try {
-            const solicitacao = {
-                clienteId: user.uid,
-                clienteNome: user.displayName || 'Cliente',
-                createdAt: serverTimestamp(),
-                descricao: service.descricao,
-                donoId: service.credenciado_id,
+            const cartItem = {
+                userId: user.uid,
+                serviceId: service.id,
                 nome_servico: service.nome_servico,
+                descricao: service.descricao,
                 preco: service.preco_com_desconto || service.preco_original,
-                status: 'pendente',
-                allowContact: true,
+                credenciado_id: service.credenciado_id,
+                empresa_nome: service.empresa_nome,
+                imagemUrl: service.imagemUrl,
+                createdAt: serverTimestamp(),
             };
-            console.log('Dados da solicitação:', solicitacao);
+            console.log('Item do carrinho:', cartItem);
 
-            const docRef = await addDoc(collection(db, 'solicitacoes'), solicitacao);
-            console.log('Solicitação criada com ID:', docRef.id);
+            const docRef = await addDoc(collection(db, 'carts'), cartItem);
+            console.log('Item adicionado ao carrinho com ID:', docRef.id);
 
             if (isMounted.current) {
-                Alert.alert('Serviço solicitado com sucesso!');
-                console.log('Navegando de volta');
-                router.back();
-            } else {
-                console.log('Componente desmontado antes da navegação');
+                Alert.alert('Serviço adicionado ao carrinho!', '', [
+                    { text: 'Continuar', onPress: () => router.back() },
+                    { text: 'Ir para o Carrinho', onPress: () => router.push('/CartScreen') },
+                ]);
             }
         } catch (error) {
-            console.error('Erro ao solicitar serviço:', error);
+            console.error('Erro ao adicionar ao carrinho:', error);
             if (isMounted.current) {
-                Alert.alert('Erro ao solicitar', (error as Error).message);
+                Alert.alert('Erro ao adicionar', (error as Error).message);
             }
         } finally {
             if (isMounted.current) {
-                console.log('Finalizando solicitação, loading:', false);
+                console.log('Finalizando adição, loading:', false);
                 setLoading(false);
             }
         }
@@ -145,58 +144,71 @@ export default function ServiceDetailsScreen() {
     }
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-            <Image source={{ uri: service.imagemUrl }} style={styles.image} />
-            <Text style={styles.title}>{service.nome_servico}</Text>
-            <Text style={styles.description}>{service.descricao}</Text>
-
-            <View style={styles.infoContainer}>
-                <View style={styles.info}>
-                    <MaterialIcons name="business" size={20} color="#003DA5" />
-                    <Text style={styles.infoText}>{service.empresa_nome || 'Não informado'}</Text>
-                </View>
-
-                <View style={styles.info}>
-                    <FontAwesome name="phone" size={20} color="#003DA5" />
-                    <Text style={styles.infoText}>
-                        {typeof credenciado === 'string' ? credenciado : credenciado.telefone || 'Não informado'}
-                    </Text>
-                </View>
-
-                <View style={styles.info}>
-                    <MaterialIcons name="location-on" size={20} color="#003DA5" />
-                    <Text style={styles.infoText}>
-                        {typeof credenciado === 'string' ? credenciado : credenciado.endereco || 'Não informado'}
-                    </Text>
-                </View>
-
-                <View style={styles.info}>
-                    <FontAwesome name="money" size={20} color="#003DA5" />
-                    <Text style={styles.infoTextPrice}>
-                        R$ {service.preco_com_desconto || service.preco_original}
-                    </Text>
-                </View>
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                    <Text style={styles.backText}>Voltar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.cartButton}
+                    onPress={() => router.push('/CartScreen')}
+                >
+                    <FontAwesome name="shopping-cart" size={24} color="#003DA5" />
+                </TouchableOpacity>
             </View>
+            <ScrollView contentContainerStyle={styles.contentContainer}>
+                {service.imagemUrl && <Image source={{ uri: service.imagemUrl }} style={styles.image} />}
+                <Text style={styles.title}>{service.nome_servico}</Text>
+                <Text style={styles.description}>{service.descricao}</Text>
 
-            <TouchableOpacity style={styles.button} onPress={openMap}>
-                <Ionicons name="map" size={20} color="#FFF" />
-                <Text style={styles.buttonText}> Ver no Mapa</Text>
-            </TouchableOpacity>
+                <View style={styles.infoContainer}>
+                    <View style={styles.info}>
+                        <MaterialIcons name="business" size={20} color="#003DA5" />
+                        <Text style={styles.infoText}>{service.empresa_nome || 'Não informado'}</Text>
+                    </View>
 
-            <Text style={styles.consent}>
-                Ao solicitar, você permite contato por email ou telefone.
-            </Text>
+                    <View style={styles.info}>
+                        <FontAwesome name="phone" size={20} color="#003DA5" />
+                        <Text style={styles.infoText}>
+                            {typeof credenciado === 'string' ? credenciado : credenciado.telefone || 'Não informado'}
+                        </Text>
+                    </View>
 
-            <TouchableOpacity
-                style={[styles.button, styles.actionButton, loading && styles.disabled]}
-                onPress={handleSolicitarServico}
-                disabled={loading}
-            >
-                <Text style={styles.buttonText}>
-                    {loading ? 'Enviando...' : 'Solicitar Serviço'}
+                    <View style={styles.info}>
+                        <MaterialIcons name="location-on" size={20} color="#003DA5" />
+                        <Text style={styles.infoText}>
+                            {typeof credenciado === 'string' ? credenciado : credenciado.endereco || 'Não informado'}
+                        </Text>
+                    </View>
+
+                    <View style={styles.info}>
+                        <FontAwesome name="money" size={20} color="#003DA5" />
+                        <Text style={styles.infoTextPrice}>
+                            R$ {service.preco_com_desconto || service.preco_original}
+                        </Text>
+                    </View>
+                </View>
+
+                <TouchableOpacity style={styles.button} onPress={openMap}>
+                    <Ionicons name="map" size={20} color="#FFF" />
+                    <Text style={styles.buttonText}> Ver no Mapa</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.consent}>
+                    Ao adicionar ao carrinho, você permite contato por email ou telefone.
                 </Text>
-            </TouchableOpacity>
-        </ScrollView>
+
+                <TouchableOpacity
+                    style={[styles.button, styles.actionButton, loading && styles.disabled]}
+                    onPress={handleAddToCart}
+                    disabled={loading}
+                >
+                    <Text style={styles.buttonText}>
+                        {loading ? 'Adicionando...' : 'Adicionar ao Carrinho'}
+                    </Text>
+                </TouchableOpacity>
+            </ScrollView>
+        </View>
     );
 }
 
@@ -205,9 +217,28 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F5F5F5',
     },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 15,
+        backgroundColor: '#FFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#DDD',
+    },
+    backButton: {
+        padding: 10,
+    },
+    backText: {
+        color: '#003DA5',
+        fontSize: 16,
+    },
+    cartButton: {
+        padding: 10,
+    },
     contentContainer: {
         padding: 15,
-        paddingTop: Platform.OS === 'android' ? 30 : 15, // Ajuste para Android
+        paddingTop: Platform.OS === 'android' ? 10 : 0,
     },
     image: {
         width: '100%',

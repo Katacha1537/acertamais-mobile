@@ -1,9 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '@firebase/auth';
 import { useRouter } from 'expo-router';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -16,9 +18,19 @@ import { useAuth } from '../../context/AuthContext';
 import { auth, db } from '../../service/firebase';
 
 interface Service {
-  id: string;
+  serviceId: string;
   nome_servico: string;
-  credenciadoNome: string;
+  preco: number;
+  quantity: number;
+  total: number;
+  credenciado_id: string;
+  empresa_nome: string;
+}
+
+interface Solicitation {
+  id: string;
+  services: Service[];
+  total: number;
   createdAt: { seconds: number };
 }
 
@@ -29,54 +41,84 @@ interface UserData {
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth(); // Renomeei para evitar confusão com variáveis locais
+  const { user } = useAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [servicosContratados, setServicosContratados] = useState<number>(0);
-  const [historicoServicos, setHistoricoServicos] = useState<Service[]>([]);
+  const [historicoSolicitacoes, setHistoricoSolicitacoes] = useState<Solicitation[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [logoutLoading, setLogoutLoading] = useState<boolean>(false);
+  const [expandedSolicitationId, setExpandedSolicitationId] = useState<string | null>(null);
+  const [menuVisible, setMenuVisible] = useState<boolean>(false); // Estado para controlar o menu
 
   const router = useRouter();
 
   const fetchData = async () => {
     try {
       setRefreshing(true);
-      if (!user) throw new Error('Usuário não autenticado');
+      if (!user?.uid) throw new Error('Usuário não autenticado ou UID ausente');
 
+      // Fetch user data
       const userDocRef = doc(db, 'funcionarios', user.uid);
       const userDoc = await getDoc(userDocRef);
       if (!userDoc.exists()) throw new Error('Usuário não encontrado');
       const data = userDoc.data() as UserData;
       setUserData(data);
 
+      // Fetch company name
       const companyDocRef = doc(db, 'empresas', data.empresaId);
       const companyDoc = await getDoc(companyDocRef);
       if (companyDoc.exists()) setCompanyName(companyDoc.data().nomeFantasia);
 
+      // Fetch confirmed solicitations
       const solicitacoesRef = collection(db, 'solicitacoes');
-      const q = query(solicitacoesRef, where('clienteId', '==', user.uid), where('status', '==', 'confirmada'));
+      const q = query(
+        solicitacoesRef,
+        where('clienteId', '==', user.uid),
+        where('status', '==', 'm run start'),
+        where('services', '!=', null)
+      );
       const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot || !querySnapshot.docs) {
+        console.warn('Nenhum documento encontrado ou querySnapshot inválido');
+        setServicosContratados(0);
+        setHistoricoSolicitacoes([]);
+        return;
+      }
+
       setServicosContratados(querySnapshot.size);
 
-      const servicosList = await Promise.all(
+      const solicitacoesList = await Promise.all(
         querySnapshot.docs.map(async (doc) => {
-          const servicoData = doc.data();
-          const credenciadoNome = await getNameCredenciado(servicoData.donoId);
+          const solicitacaoData = doc.data();
+          if (!Array.isArray(solicitacaoData.services)) {
+            console.warn(`Solicitação ${doc.id} ignorada: campo 'services' inválido`);
+            return null;
+          }
+
+          const servicesWithCredenciado = await Promise.all(
+            solicitacaoData.services.map(async (service: Service) => {
+              const credenciadoNome = await getNameCredenciado(service.credenciado_id);
+              return { ...service, empresa_nome: credenciadoNome };
+            })
+          );
 
           return {
             id: doc.id,
-            nome_servico: servicoData.nome_servico || 'Serviço sem nome',
-            credenciadoNome,
-            createdAt: servicoData.createdAt || { seconds: 0 },
+            services: servicesWithCredenciado,
+            total: solicitacaoData.total || 0,
+            createdAt: solicitacaoData.createdAt || { seconds: 0 },
           };
         })
       );
-      setHistoricoServicos(servicosList);
+
+      const validSolicitacoes = solicitacoesList.filter((solicitation): solicitation is Solicitation => solicitation !== null);
+      setHistoricoSolicitacoes(validSolicitacoes.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds));
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error('Erro no fetchData:', error.message);
+        console.error('Erro no fetchData:', error.message, error.stack);
       } else {
         console.error('Erro desconhecido:', error);
       }
@@ -90,11 +132,8 @@ export default function HomeScreen() {
     console.log('useEffect disparado, user:', user);
     if (!user) {
       console.log('Usuário deslogado, redirecionando para /');
-      // Adicionar um pequeno atraso para evitar conflitos de renderização
       setTimeout(() => {
-        router.push({
-          pathname: '/ResetToRoot'
-        });
+        router.push({ pathname: '/ResetToRoot' });
       }, 0);
       return;
     }
@@ -114,7 +153,7 @@ export default function HomeScreen() {
       if (credenciadoSnap.exists()) {
         return credenciadoSnap.data().nomeFantasia || 'Empresa desconhecida';
       } else {
-        console.error('Credenciado não encontrado.');
+        console.error('Credenciado não encontrado para ID:', donoId);
         return 'Empresa desconhecida';
       }
     } catch (error) {
@@ -130,10 +169,7 @@ export default function HomeScreen() {
       console.log('Iniciando logout...');
       await signOut(auth);
       console.log('Logout concluído com sucesso');
-
-      router.push({
-        pathname: '/ResetToRoot'
-      });
+      router.push({ pathname: '/ResetToRoot' });
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       alert('Erro ao sair da conta. Tente novamente.');
@@ -141,6 +177,93 @@ export default function HomeScreen() {
       setLogoutLoading(false);
       console.log('Finalizando processo de logout');
     }
+  };
+
+  // Função para desativar a conta
+  const handleDisableAccount = async () => {
+    if (!user) return;
+
+    try {
+      const userDocRef = doc(db, 'funcionarios', user.uid);
+      await updateDoc(userDocRef, { status: 'disabled' });
+      Alert.alert('Sucesso', 'Sua conta foi desativada.');
+      await signOut(auth);
+      console.log('Logout concluído com sucesso');
+      router.push({ pathname: '/ResetToRoot' });
+    } catch (error) {
+      console.error('Erro ao desativar conta:', error);
+      Alert.alert('Erro', 'Não foi possível desativar a conta. Tente novamente.');
+    }
+  };
+
+  // Função para confirmar a desativação da conta
+  const confirmDisableAccount = () => {
+    Alert.alert(
+      'Desativar Conta',
+      'Tem certeza que deseja apagar sua conta?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar',
+          style: 'destructive',
+          onPress: handleDisableAccount,
+        },
+      ]
+    );
+    setMenuVisible(false);
+  };
+
+  const toggleExpand = (solicitationId: string) => {
+    setExpandedSolicitationId(expandedSolicitationId === solicitationId ? null : solicitationId);
+  };
+
+  const renderServiceItem = (service: Service) => (
+    <View style={styles.serviceItem} key={service.serviceId}>
+      <View>
+        <Text style={styles.serviceName}>{service.nome_servico}</Text>
+        <Text style={styles.companyName}>{service.empresa_nome}</Text>
+        <Text style={styles.serviceDetails}>Quantidade: {service.quantity}</Text>
+        <Text style={styles.serviceDetails}>
+          Preço Unitário: R$ {service.preco.toFixed(2).replace('.', ',')}
+        </Text>
+        <Text style={styles.serviceDetails}>
+          Total: R$ {service.total.toFixed(2).replace('.', ',')}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderSolicitationItem = (solicitation: Solicitation) => {
+    const isExpanded = expandedSolicitationId === solicitation.id;
+    return (
+      <View key={solicitation.id} style={styles.solicitationItem}>
+        <TouchableOpacity onPress={() => toggleExpand(solicitation.id)} style={styles.solicitationHeader}>
+          <View>
+            <Text style={styles.solicitationTitle}>
+              Solicitação #{solicitation.id.slice(0, 8)} ({solicitation.services.length} serviços)
+            </Text>
+            <Text style={styles.solicitationDate}>
+              {solicitation.createdAt
+                ? new Date(solicitation.createdAt.seconds * 1000).toLocaleDateString('pt-BR')
+                : 'Sem data'}
+            </Text>
+            <Text style={styles.solicitationTotal}>
+              Total: R$ {solicitation.total.toFixed(2).replace('.', ',')}
+            </Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color="#003087"
+          />
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={styles.servicesContainer}>
+            {solicitation.services.map(renderServiceItem)}
+          </View>
+        )}
+      </View>
+    );
   };
 
   if (loading) {
@@ -171,6 +294,20 @@ export default function HomeScreen() {
           )}
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bem-vindo, {userData?.nome || 'Usuário'}!</Text>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setMenuVisible(!menuVisible)}
+        >
+          <Ionicons name="menu-outline" size={30} color="white" />
+        </TouchableOpacity>
+        {menuVisible && (
+          <View style={styles.menuDropdown}>
+            <TouchableOpacity style={styles.menuItem} onPress={confirmDisableAccount}>
+              <Ionicons name="trash-outline" size={20} color="#FF0000" />
+              <Text style={styles.menuText}>Apagar Conta</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
       <View style={styles.userInfo}>
         <Text style={styles.companyText}>Trabalha em: {companyName || 'Empresa não disponível'}</Text>
@@ -183,26 +320,14 @@ export default function HomeScreen() {
       >
         <View style={styles.dashboardContainer}>
           <View style={styles.dashboardCard}>
-            <Text style={styles.dashboardLabel}>Serviços Contratados:</Text>
+            <Text style={styles.dashboardLabel}>Solicitações Confirmadas:</Text>
             <Text style={styles.dashboardInfo}>{servicosContratados}</Text>
           </View>
-          <Text style={styles.sectionTitle}>Histórico de Serviços Feitos</Text>
-          {historicoServicos.length > 0 ? (
-            historicoServicos.map((servico) => (
-              <View key={servico.id} style={styles.serviceItem}>
-                <View>
-                  <Text style={styles.serviceName}>{servico.nome_servico || 'Sem nome'}</Text>
-                  <Text style={styles.companyName}>{servico.credenciadoNome || 'Desconhecida'}</Text>
-                </View>
-                <Text style={styles.serviceDate}>
-                  {servico.createdAt
-                    ? new Date(servico.createdAt.seconds * 1000).toLocaleDateString('pt-BR')
-                    : 'Sem data'}
-                </Text>
-              </View>
-            ))
+          <Text style={styles.sectionTitle}>Histórico de Solicitações Confirmadas</Text>
+          {historicoSolicitacoes.length > 0 ? (
+            historicoSolicitacoes.map(renderSolicitationItem)
           ) : (
-            <Text style={styles.noServiceText}>Nenhum serviço concluído.</Text>
+            <Text style={styles.noServiceText}>Nenhuma solicitação confirmada.</Text>
           )}
         </View>
       </ScrollView>
@@ -303,35 +428,97 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     marginBottom: 15,
   },
-  serviceItem: {
+  solicitationItem: {
     backgroundColor: '#F5F7FA',
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
+  },
+  solicitationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  serviceName: {
+  solicitationTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#003087',
   },
-  companyName: {
+  solicitationDate: {
     fontSize: 14,
     fontWeight: '500',
     color: '#666',
     marginTop: 2,
   },
-  serviceDate: {
+  solicitationTotal: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#003087',
+    marginTop: 2,
+  },
+  servicesContainer: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
+    paddingTop: 10,
+  },
+  serviceItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    backgroundColor: '#FFF',
+    marginBottom: 5,
+    borderRadius: 5,
+  },
+  serviceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  companyName: {
+    fontSize: 12,
     fontWeight: '500',
     color: '#666',
+    marginTop: 2,
+  },
+  serviceDetails: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   noServiceText: {
     textAlign: 'center',
     fontSize: 16,
     color: '#999',
     marginVertical: 10,
+  },
+  menuButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+  },
+  menuDropdown: {
+    position: 'absolute',
+    top: 90,
+    right: 20,
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  menuText: {
+    fontSize: 16,
+    color: '#FF0000',
+    marginLeft: 10,
+    fontWeight: '500',
   },
 });

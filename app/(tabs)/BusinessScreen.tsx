@@ -1,6 +1,8 @@
+import { useAuth } from '@/context/AuthContext';
+import { useIsOk } from '@/context/IsOkContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -10,6 +12,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -22,6 +25,7 @@ interface Credenciado {
     endereco: string;
     segmento: string; // ID do segmento
     imagemUrl: string;
+    planoId: string; // Campo para armazenar o ID do plano
 }
 
 interface Segmento {
@@ -36,7 +40,11 @@ export default function BusinessScreenT() {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [selectedSegment, setSelectedSegment] = useState<string>("Todos");
+    const [searchQuery, setSearchQuery] = useState<string>(""); // Estado para a pesquisa
     const router = useRouter();
+    const { user } = useAuth();
+
+    const { isOk } = useIsOk()
 
     useEffect(() => {
         const fetchData = async () => {
@@ -44,6 +52,36 @@ export default function BusinessScreenT() {
                 console.log("Iniciando fetchData...");
                 setLoading(true);
                 setError(null);
+
+                // Buscar funcionário com base no user.uid
+                const funcionarioRef = doc(db, "funcionarios", user?.uid || "");
+                const funcionarioDoc = await getDoc(funcionarioRef);
+
+                if (!funcionarioDoc.exists()) {
+                    throw new Error("Funcionário não encontrado.");
+                }
+
+                const funcionarioData = funcionarioDoc.data();
+                const empresaId = funcionarioData?.empresaId;
+
+                if (!empresaId) {
+                    throw new Error("Empresa não encontrada para o funcionário.");
+                }
+
+                // Buscar empresa para obter o planoId
+                const empresaRef = doc(db, "empresas", empresaId);
+                const empresaDoc = await getDoc(empresaRef);
+
+                if (!empresaDoc.exists()) {
+                    throw new Error("Empresa não encontrada.");
+                }
+
+                const empresaData = empresaDoc.data();
+                const planoId = empresaData?.planos;
+
+                if (!planoId) {
+                    throw new Error("Plano não encontrado para a empresa.");
+                }
 
                 // Buscar segmentos
                 const segmentosRef = collection(db, "segmentos");
@@ -60,18 +98,22 @@ export default function BusinessScreenT() {
                 const snapshot = await getDocs(credenciadosRef);
                 console.log("Snapshot recebido, docs:", snapshot.docs.length);
 
-                const credenciadosData: Credenciado[] = snapshot.docs.map((doc) => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        nomeFantasia: data.nomeFantasia || "Nome não disponível",
-                        endereco: data.endereco || "Endereço não disponível",
-                        segmento: data.segmento || "Segmento não disponível",
-                        imagemUrl: data.imagemUrl || "https://via.placeholder.com/80",
-                    };
-                });
+                const credenciadosData: Credenciado[] = snapshot.docs
+                    .map((doc) => {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            nomeFantasia: data.nomeFantasia || "Nome não disponível",
+                            endereco: data.endereco || "Endereço não disponível",
+                            segmento: data.segmento || "Segmento não disponível",
+                            imagemUrl: data.imagemUrl || "https://via.placeholder.com/80",
+                            planoId: data.planos || "", // Corrige para planoId
+                        };
+                    })
+                    // Filtrar credenciados pelo planoId da empresa
+                    .filter((credenciado) => credenciado.planoId === planoId);
 
-                console.log("Credenciados carregados:", credenciadosData);
+                console.log("Credenciados filtrados:", credenciadosData);
                 setCredenciados(credenciadosData);
                 setFilteredCredenciados(credenciadosData);
             } catch (error: any) {
@@ -83,8 +125,13 @@ export default function BusinessScreenT() {
             }
         };
 
-        fetchData();
-    }, []);
+        if (user?.uid) {
+            fetchData();
+        } else {
+            setError("Usuário não autenticado.");
+            setLoading(false);
+        }
+    }, [user]);
 
     // Função para obter o nome do segmento a partir do ID
     const getSegmentoNome = (segmentoId: string) => {
@@ -92,18 +139,27 @@ export default function BusinessScreenT() {
         return segmento ? segmento.nome : "Segmento não disponível";
     };
 
-    // Filtrar credenciados com base no segmento selecionado
+    // Filtrar credenciados com base no segmento selecionado e na pesquisa
     useEffect(() => {
-        if (selectedSegment === "Todos") {
-            setFilteredCredenciados(credenciados);
-        } else {
-            const filtered = credenciados.filter((credenciado) => {
+        let filtered = credenciados;
+
+        // Filtro por segmento
+        if (selectedSegment !== "Todos") {
+            filtered = filtered.filter((credenciado) => {
                 const segmentoNome = getSegmentoNome(credenciado.segmento);
                 return segmentoNome === selectedSegment;
             });
-            setFilteredCredenciados(filtered);
         }
-    }, [selectedSegment, credenciados, segmentos]);
+
+        // Filtro por pesquisa
+        if (searchQuery) {
+            filtered = filtered.filter((credenciado) =>
+                credenciado.nomeFantasia.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+        }
+
+        setFilteredCredenciados(filtered);
+    }, [selectedSegment, searchQuery, credenciados, segmentos]);
 
     const handlePress = (credenciadoId: string) => {
         console.log("Navegando para ServicesScreen com credenciadoId:", credenciadoId);
@@ -139,7 +195,7 @@ export default function BusinessScreenT() {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.loadingContainer}>
+            <SafeAreaView style={styles.container}>
                 <ActivityIndicator size="large" color="#003DA5" />
                 <Text style={styles.loadingText}>Carregando...</Text>
             </SafeAreaView>
@@ -148,7 +204,7 @@ export default function BusinessScreenT() {
 
     if (error) {
         return (
-            <SafeAreaView style={styles.loadingContainer}>
+            <SafeAreaView style={styles.container}>
                 <Text style={styles.errorText}>{error}</Text>
             </SafeAreaView>
         );
@@ -159,8 +215,19 @@ export default function BusinessScreenT() {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Input de Pesquisa */}
+            {isOk === false && (<View style={styles.searchContainer}>
+                <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Pesquisar por nome..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+            </View>)}
+
             {/* Segment Control com FlatList Horizontal */}
-            <FlatList
+            {isOk === false && <FlatList
                 horizontal
                 data={segmentData}
                 renderItem={renderSegmento}
@@ -168,7 +235,7 @@ export default function BusinessScreenT() {
                 showsHorizontalScrollIndicator={false}
                 style={styles.segmentContainer}
                 contentContainerStyle={styles.segmentContent}
-            />
+            />}
 
             {/* List of Credenciados */}
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -212,17 +279,37 @@ export default function BusinessScreenT() {
 
 const styles = StyleSheet.create({
     container: {
+        paddingTop: 30,
         flex: 1,
         backgroundColor: "#F4F7FC",
     },
-    segmentContainer: {
-        flex: 0.1,
+    searchContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#FFF",
+        borderRadius: 10,
+        margin: 10,
         paddingHorizontal: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: "#E0E0E0",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    searchIcon: {
+        marginRight: 10,
+    },
+    searchInput: {
+        flex: 1,
+        height: 40,
+        fontSize: 16,
+        color: "#333",
+    },
+    segmentContainer: {
+        flex: 0.5,
     },
     segmentContent: {
-        marginTop: 45
+        marginTop: 0,
     },
     segmentButton: {
         height: 40,
@@ -255,8 +342,8 @@ const styles = StyleSheet.create({
         fontWeight: "700",
     },
     scrollContent: {
-        padding: 10, // Reduzido o padding para diminuir o espaço
-        paddingTop: 5, // Ajustado para minimizar o espaço entre os segmentos e a lista
+        padding: 10,
+        paddingTop: 5,
     },
     card: {
         flexDirection: "row",
@@ -308,12 +395,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "bold",
         color: "#FFF",
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#F4F7FC",
     },
     loadingText: {
         fontSize: 18,

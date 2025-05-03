@@ -1,43 +1,87 @@
 import { useAuth } from '@/context/AuthContext';
-import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from expo/vector-icons
+import { db } from '@/service/firebase';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Tabs, useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
-import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { doc, getDoc } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+
+interface UserData {
+  nome?: string;
+  cpf?: string;
+  email?: string;
+  telefone?: string;
+  endereco?: string;
+  dataNascimento?: string;
+  pessoasNaCasa?: number;
+  isReq: boolean;
+  status?: string;
+}
 
 export default function TabLayout() {
-
   const router = useRouter();
-
   const { user } = useAuth();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isOk, setIsOk] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    console.log('useEffect disparado, user:', user);
-    console.log('Valor atual de user é null?', user === null);
     if (!user) {
-      console.log('Usuário deslogado, tentando redirecionar para /');
-      router.push({
-        pathname: '/ResetToRoot'
-      });
-      console.log('Redirecionamento chamado');
+      router.push('/ResetToRoot');
+      setLoading(false);
       return;
     }
-    console.log('Usuário autenticado, chamando fetchData');
+
+    const fetchData = async () => {
+      try {
+        // Buscar status da API
+        const statusRes = await fetch('https://webhook.zapflow.click/webhook/7679d554-4c70-42e2-99a5-659b826e6781');
+        const statusData = await statusRes.json();
+        setIsOk(statusData.ok);
+
+        // Buscar dados do usuário no Firestore
+        const userDocRef = doc(db, 'funcionarios', user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          console.log('Firestore data:', data);
+          setUserData(data as UserData);
+        } else {
+          console.log('Documento do usuário não encontrado');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados:', error);
+        setIsOk(false); // Definir isOk como false em caso de erro
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [user, router]);
 
-  // Componente personalizado para feedback tátil
+  // Debug isOk changes
+  useEffect(() => {
+    console.log('userData:', userData);
+    console.log('isOk:', isOk);
+  }, [userData, isOk]);
+
   const HapticTab = ({ onPress, children, ...props }: any) => {
-    const handlePressIn = (ev: any) => {
+    const handlePressIn = () => {
       if (Platform.OS === 'ios') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else if (Platform.OS === 'android') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      if (onPress) onPress(ev);
+      onPress?.();
     };
 
     return (
       <TouchableOpacity
         {...props}
-        onPressIn={handlePressIn}
+        onPress={handlePressIn}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
@@ -46,7 +90,6 @@ export default function TabLayout() {
     );
   };
 
-  // Componente de fundo da barra de navegação
   const TabBarBackground = () => (
     <View
       style={[
@@ -58,6 +101,14 @@ export default function TabLayout() {
       ]}
     />
   );
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#003da5" />
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -109,12 +160,23 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="CartScreen"
+        options={{
+          title: 'Carrinho',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="cart-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="ProfileScreen"
         options={{
           title: 'Perfil',
           tabBarIcon: ({ color }) => (
             <Ionicons name="person-outline" size={24} color={color} />
           ),
+          href: isOk === false ? undefined : null, // Hide tab when isOk is true
+          tabBarLabel: isOk === false ? 'Perfil' : '', // Ensure no label when hidden
         }}
       />
     </Tabs>
