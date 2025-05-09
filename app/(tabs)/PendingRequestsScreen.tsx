@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../../context/AuthContext';
 import { db } from '../../service/firebase';
 
@@ -196,7 +197,7 @@ const PendingRequestsScreen: React.FC<PendingRequestsScreenProps> = ({ navigatio
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Text style={styles.title}>Minhas Solicitações Pendentes</Text>
             {pendingRequests.length === 0 ? (
                 <Text style={styles.noRequestsText}>Nenhuma solicitação pendente encontrada.</Text>
@@ -205,7 +206,7 @@ const PendingRequestsScreen: React.FC<PendingRequestsScreenProps> = ({ navigatio
                     data={pendingRequests}
                     keyExtractor={(item) => item.id}
                     renderItem={renderRequestItem}
-                    contentContainerStyle={styles.listContainer}
+                    contentContainerStyle={[styles.listContainer, { paddingBottom: 20 }]} // Adiciona padding inferior
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -216,7 +217,7 @@ const PendingRequestsScreen: React.FC<PendingRequestsScreenProps> = ({ navigatio
                     }
                 />
             )}
-        </View>
+        </SafeAreaView>
     );
 };
 
@@ -226,7 +227,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         padding: 20,
-        paddingTop: 50,
         backgroundColor: '#F4F7FC',
     },
     title: {

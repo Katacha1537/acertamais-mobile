@@ -184,7 +184,7 @@ export default function BusinessScreenT() {
         >
             <Text
                 style={[
-                    styles.segmentText,
+                    styles.segmentTextJUST,
                     selectedSegment === item.nome && styles.segmentTextActive,
                 ]}
             >
@@ -250,7 +250,7 @@ export default function BusinessScreenT() {
                         >
                             <Image
                                 source={{ uri: item.imagemUrl }}
-                                style={styles.logoImage}
+                                style={styles.bannerImage}
                             />
                             <View style={styles.cardContent}>
                                 <Text style={styles.nomeFantasia}>{item.nomeFantasia}</Text>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#003DA5",
         borderColor: "#003DA5",
     },
-    segmentText: {
+    segmentTextJUST: {
         fontSize: 14,
         fontWeight: "600",
         color: "#666",
@@ -346,25 +346,26 @@ const styles = StyleSheet.create({
         paddingTop: 5,
     },
     card: {
-        flexDirection: "row",
+        flexDirection: "column",
         backgroundColor: "#FFF",
         borderRadius: 10,
-        padding: 15,
         marginBottom: 15,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 5,
         elevation: 3,
+        overflow: "hidden",
     },
     cardContent: {
         flex: 1,
+        padding: 15,
     },
-    logoImage: {
-        width: 60,
-        height: 60,
-        borderRadius: 10,
-        marginRight: 15,
+    bannerImage: {
+        width: "100%",
+        height: 120,
+        borderTopLeftRadius: 10,
+        borderTopRightRadius: 10,
         backgroundColor: "#eee",
     },
     nomeFantasia: {

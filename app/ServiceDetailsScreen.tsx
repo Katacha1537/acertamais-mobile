@@ -2,19 +2,19 @@ import { useAuth } from '@/context/AuthContext';
 import { db } from '@/service/firebase';
 import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
-    Image,
     Linking,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Service {
     id: string;
@@ -89,6 +89,27 @@ export default function ServiceDetailsScreen() {
         console.log('Iniciando adição ao carrinho...');
 
         try {
+            // Fetch current cart items to check credenciado_id
+            const q = query(collection(db, 'carts'), where('userId', '==', user.uid));
+            const snapshot = await getDocs(q);
+            const cartItems = snapshot.docs.map((doc) => doc.data());
+
+            // Check if cart is not empty and has items with different credenciado_id
+            if (cartItems.length > 0) {
+                const hasDifferentCredenciado = cartItems.some(
+                    (item) => item.credenciado_id !== service.credenciado_id
+                );
+                if (hasDifferentCredenciado) {
+                    Alert.alert(
+                        'Atenção',
+                        'É possível selecionar serviços de uma empresa por vez.'
+                    );
+                    console.log('Tentativa de adicionar serviço de credenciado diferente');
+                    setLoading(false);
+                    return;
+                }
+            }
+
             const cartItem = {
                 userId: user.uid,
                 serviceId: service.id,
@@ -99,6 +120,7 @@ export default function ServiceDetailsScreen() {
                 empresa_nome: service.empresa_nome,
                 imagemUrl: service.imagemUrl,
                 createdAt: serverTimestamp(),
+                quantity: 1, // Initialize quantity
             };
             console.log('Item do carrinho:', cartItem);
 
@@ -144,7 +166,7 @@ export default function ServiceDetailsScreen() {
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Text style={styles.backText}>Voltar</Text>
@@ -157,7 +179,6 @@ export default function ServiceDetailsScreen() {
                 </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.contentContainer}>
-                {service.imagemUrl && <Image source={{ uri: service.imagemUrl }} style={styles.image} />}
                 <Text style={styles.title}>{service.nome_servico}</Text>
                 <Text style={styles.description}>{service.descricao}</Text>
 
@@ -208,7 +229,7 @@ export default function ServiceDetailsScreen() {
                     </Text>
                 </TouchableOpacity>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 

@@ -19,12 +19,13 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
-    Image,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface CartItem {
     id: string;
@@ -68,7 +69,6 @@ export default function CartScreen() {
                 ...doc.data(),
                 quantity: doc.data().quantity || 1,
             })) as CartItem[];
-
 
             // Fetch user data
             const userDocRef = doc(db, 'funcionarios', user.uid);
@@ -169,7 +169,7 @@ export default function CartScreen() {
                 total: services.reduce((sum, service) => sum + service.total, 0),
                 status: 'pendente',
                 allowContact: true,
-                credenciado_id: credenciadoId, // Adiciona o credenciado_id aqui
+                credenciado_id: credenciadoId,
             };
 
             // Salvar a solicitação
@@ -200,14 +200,13 @@ export default function CartScreen() {
 
     const renderItem = ({ item }: { item: CartItem }) => (
         <View style={styles.card}>
-            <Image source={{ uri: item.imagemUrl }} style={styles.image} />
             <View style={styles.itemDetails}>
                 <Text style={styles.title}>{item.nome_servico}</Text>
                 <Text style={styles.description} numberOfLines={2}>
                     {item.descricao}
                 </Text>
                 <Text style={styles.price}>
-                    R$ {item.preco} x {item.quantity} = R$ {(item.preco * item.quantity).toFixed(2)}
+                    R$ {item.preco.toFixed(2)} x {item.quantity} = R$ {(item.preco * item.quantity).toFixed(2)}
                 </Text>
                 <Text style={styles.company}>{item.empresa_nome}</Text>
                 <View style={styles.quantityContainer}>
@@ -238,14 +237,14 @@ export default function CartScreen() {
 
     if (loading) {
         return (
-            <View style={styles.loading}>
+            <SafeAreaView style={styles.loading}>
                 <ActivityIndicator size="large" color="#003DA5" />
-            </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Text style={styles.backText}>Voltar</Text>
@@ -257,7 +256,7 @@ export default function CartScreen() {
                 renderItem={renderItem}
                 keyExtractor={(item) => item.id}
                 ListEmptyComponent={<Text style={styles.empty}>Seu carrinho está vazio</Text>}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: 20 }]}
             />
             {cartItems.length > 0 && (
                 <View style={styles.footer}>
@@ -273,7 +272,7 @@ export default function CartScreen() {
                     </TouchableOpacity>
                 </View>
             )}
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -287,8 +286,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 15,
         backgroundColor: '#FFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#DDD',
     },
     backButton: {
         padding: 10,
@@ -319,6 +316,13 @@ const styles = StyleSheet.create({
         height: 80,
         borderRadius: 8,
         marginRight: 10,
+    },
+    imagePlaceholder: {
+        width: 80,
+        height: 80,
+        borderRadius: 8,
+        marginRight: 10,
+        backgroundColor: '#EEE',
     },
     itemDetails: {
         flex: 1,
@@ -372,6 +376,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderTopWidth: 1,
         borderTopColor: '#DDD',
+        marginBottom: Platform.OS === 'ios' ? 70 : 0,
     },
     totalText: {
         fontSize: 18,
