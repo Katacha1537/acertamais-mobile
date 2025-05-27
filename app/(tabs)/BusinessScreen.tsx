@@ -8,13 +8,14 @@ import {
     ActivityIndicator,
     FlatList,
     Image,
+    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { db } from "../../service/firebase";
 
@@ -344,6 +345,7 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 10,
         paddingTop: 5,
+        paddingBottom: Platform.OS === 'ios' ? 70 : 0,
     },
     card: {
         flexDirection: "column",
