@@ -8,13 +8,13 @@ import {
     deleteDoc,
     doc,
     getDoc,
-    getDocs,
+    onSnapshot,
     query,
     serverTimestamp,
     updateDoc,
     where,
 } from 'firebase/firestore';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -54,42 +54,58 @@ export default function CartScreen() {
     const [requesting, setRequesting] = useState<boolean>(false);
     const [userData, setUserData] = useState<UserData | null>(null);
 
-    const fetchCartItems = useCallback(async () => {
+    // Subscribe to cart changes in real-time
+    useEffect(() => {
         if (!user?.uid) {
+            setCartItems([]);
+            setUserData(null);
             setLoading(false);
             return;
         }
 
-        try {
-            setLoading(true);
-            const q = query(collection(db, 'carts'), where('userId', '==', user.uid));
-            const snapshot = await getDocs(q);
-            const items: CartItem[] = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-                quantity: doc.data().quantity || 1,
-            })) as CartItem[];
+        setLoading(true);
 
-            // Fetch user data
-            const userDocRef = doc(db, 'funcionarios', user.uid);
-            const userDoc = await getDoc(userDocRef);
-            if (!userDoc.exists()) throw new Error('Usuário não encontrado');
-            const data = userDoc.data() as UserData;
-            setUserData(data);
+        const cartsQuery = query(collection(db, 'carts'), where('userId', '==', user.uid));
+        const unsubscribeCarts = onSnapshot(
+            cartsQuery,
+            (snapshot) => {
+                const items: CartItem[] = snapshot.docs.map((d) => ({
+                    id: d.id,
+                    ...(d.data() as Omit<CartItem, 'id'>),
+                    quantity: (d.data() as any).quantity || 1,
+                }));
+                setCartItems(items);
+                setLoading(false);
+                console.log('Itens do carrinho carregados:', items.length);
+            },
+            (error) => {
+                console.error('Erro ao carregar carrinho:', error);
+                setLoading(false);
+                Alert.alert('Erro', 'Não foi possível carregar o carrinho.');
+            }
+        );
 
-            setCartItems(items);
-            console.log('Itens do carrinho carregados:', items.length);
-        } catch (error) {
-            console.error('Erro ao carregar carrinho:', error);
-            Alert.alert('Erro', 'Não foi possível carregar o carrinho.');
-        } finally {
-            setLoading(false);
-        }
+        // Fetch user data once
+        (async () => {
+            try {
+                const userDocRef = doc(db, 'funcionarios', user.uid);
+                const userDoc = await getDoc(userDocRef);
+                if (!userDoc.exists()) {
+                    console.warn('Documento do usuário não encontrado');
+                    setUserData(null);
+                } else {
+                    const data = userDoc.data() as UserData;
+                    setUserData(data);
+                }
+            } catch (err) {
+                console.error('Erro ao carregar dados do usuário:', err);
+            }
+        })();
+
+        return () => {
+            unsubscribeCarts();
+        };
     }, [user?.uid]);
-
-    useEffect(() => {
-        fetchCartItems();
-    }, [fetchCartItems]);
 
     const updateQuantity = async (itemId: string, newQuantity: number) => {
         if (newQuantity < 1) return;

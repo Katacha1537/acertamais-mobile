@@ -1,4 +1,5 @@
 import { useAuth } from '@/context/AuthContext';
+import { useIsOk } from '@/context/IsOkContext';
 import { db } from '@/service/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -23,7 +24,7 @@ export default function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [isOk, setIsOk] = useState<boolean | null>(null);
+  const { isOk } = useIsOk();
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -35,11 +36,6 @@ export default function TabLayout() {
 
     const fetchData = async () => {
       try {
-        // Buscar status da API
-        const statusRes = await fetch('https://webhook.zapflow.click/webhook/7679d554-4c70-42e2-99a5-659b826e6781');
-        const statusData = await statusRes.json();
-        setIsOk(statusData.ok);
-
         // Buscar dados do usuário no Firestore
         const userDocRef = doc(db, 'funcionarios', user.uid);
         const userDoc = await getDoc(userDocRef);
@@ -53,7 +49,6 @@ export default function TabLayout() {
         }
       } catch (error) {
         console.error('Erro ao buscar dados:', error);
-        setIsOk(false); // Definir isOk como false em caso de erro
       } finally {
         setLoading(false);
       }
